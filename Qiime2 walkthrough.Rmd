@@ -1,0 +1,1381 @@
+---
+title: "Qiime2 walkthrough for 16S, ITS and beyond"
+output:
+  html_notebook: 
+    toc: yes
+  word_document: default
+---
+#Introduction
+
+This tutorial will follow most steps from the Moving Pictures Tutorial which might be found on the qiime2 website (https://docs.qiime2.org/2018.6/tutorials/moving-pictures/) and integrate it with separate instructions for the ITS sequences. These scripts are based on the current release of qiime2 (2018.06), but keep in mind that the authors tend to change the tutorial page and update their commands at every new release of qiime2. 
+
+You can ask the Hipergator staff to update qiime2 on the support page, but they seem to keep it pretty current; be sure to modify the “module load” command accordingly in all scripts if you want to use different version. Most of the scripts are based on the previous 16Sr-RNA Preprocessing Pipeline.
+
+#Preliminary steps:
+To login on Hipergator follow the procedures reported at https://help.rc.ufl.edu/doc/Getting_Started#Connecting_to_HiPerGator. In the same page, there are also instructions for how to upload data to Hipergator. However, BEFORE uploading the data, create a folder structure that will be useful for your purposes. In this case, I will be showing both 16S and ITS pipelines, and then how to merge the tables. 
+
+After logging in, navigate to your working directory and create the necessary subfolders:
+```{bash, eval=FALSE}
+cd /ufrc/strauss/your_account/your_working_directory 
+mkdir 16S
+
+mkdir ITS
+
+mkdir merged
+```
+
+
+If you want to know who's currently working on hipergator, or if you want to check how your job is performing, you can enter this command:
+```{bash eval=FALSE}
+watch squeue -A strauss -O jobid:10,username,name,partition,state:10,reason:10,cores,gres:10,tres:30,timeused:10
+```
+
+Try keep the sums of the allocated resources lower than the account limits: some batches may just wait for the excess resources until free, others will just break the currently running batches. To exit the activity monitor press `ctrl + c`.
+
+#16S pipeline
+
+##0_setup.sh
+First things first: once you have your designed working folder, move your raw sequences into a `raw_seqs` directory created therein. Secondly, it is useful to have a single folder named `scripts` from where to edit and launch your bash commands. All scripts will also need the `logs` directory which you should create manually, in order for your commands will produce their logfile for backtrace.
+
+    NOTE: contrarily to qiime1, qiime2 doesn’t need (well, it won’t actually accept) uncompressed fastq files. Don’t `gunzip` them. 
+    NOTE2: these scripts work only for already demultiplexed paired sequences. If you have multiplexed sequences or single reads you should head to the qiime2 website and adjust the parameters of all scripts accordingly.
+
+    *IMPORTANT*: before going on with the scripts make sure there are no duplicates in the sample file names (i.e. the part of the file name that is before `_R1_` or `_R2_`)!! Change file names accurately and then proceed with the next script.
+
+```{bash eval=FALSE}
+cd 16S
+mkdir raw_seqs
+mkdir logs
+mkdir scripts
+```
+
+Now move your compressed sequence files in the `raw_seqs` directory following the instructions frtom the Hipergator wiki page. Then start writing the first bash script, using 
+```{bash, eval=FALSE}
+nano scripts/0_setup.sh
+``` 
+You will be prompted with a text editor where you should copy-paste the following:
+
+```{bash eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J setup
+#SBATCH -N 1
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/0_setup_%j.out		                                #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Setup data directory and copy raw_seqs contents
+#
+################################################################################
+
+# ----------------Housekeeping--------------------
+rm -rf data
+mkdir data
+mkdir data/raw_data
+
+# ------------------Commands----------------------
+
+# If sequences are individual directories (if not, comment this out):
+for dir in raw_seqs/*; do
+    cp $dir/* data/raw_data/.
+done 
+
+# Fix names: this depends of course on how your files are named. CHECK THEM!
+for file in data/raw_data/*.gz; do
+    mv $file ${file/Strauss?-/};
+    mv $file ${file/Strauss??-/};
+    mv $file ${file/Strauss???-/};
+done
+
+date
+```
+Exit using ctrl + X and save with Y. Then do
+
+```{bash, eval=FALSE}
+nano scripts/0_setup.sh
+```
+##1_import.sh
+*_Estimated time: few minutes_*
+
+Now it is time to import our sequences. This script will create a Qiime2 artifact which contains the sequences data (they call it FeatureData[Sequence]). This script differs from the Moving Pictures Tutorial, because it is tailored for paired end demultiplexed sequences. 
+
+Qiime2 .qza artifacts are actually compressed files which contain a typical qiime1 output file (which might be a biom table, a taxonomy table or a fasta file) hidden in some subfolders and accompanied by the files necessary for generating the visualization. Visualization are the “big thing” of qiime2, which allows the implementation of a graphic interface as well, and allow to view the data graphically with interactive plots and tables. 
+
+The script produces a visualization which summarizes the quality data and the lengths of your reads (i.e. similar to the stats.txt produced by the USEARCH pipeline commands). This can be viewed by loading it on the https://view.qiime2.org website.
+
+    NOTE: HiperGator does not have a visual interface, at least in strauss partition. Therefore, it is likely that when the scripts will look for matplotlib to build the visualization file, they would return an error. 
+    
+To avoid that, simply write an empty file in your config with
+```{bash eval=FALSE}    
+nano ~/.config/matplotlib/matplotlibrc
+```
+You will then be prompted an empty page in which you will write this line only
+```{bash eval=FALSE}    
+backend : agg
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+nano scripts/1_import.sh
+```
+
+And copypaste the following
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J q2_import
+#SBATCH --time=2:00:00                                            #Maximum number of hours
+#SBATCH -N 1                                                      #Number of nodes
+#SBATCH --mem=10g                                                 #Allocated RAM
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/1_q2_import_%j.out	                              #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Import fastq.gz files into a .qza file
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping---------------------
+rm -r demux*.q*
+cd data
+
+# ----------------Commands------------------------
+
+#Import Data in qiime2 artifact
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path raw_data \
+  --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+  --output-path demux-paired-end.qza
+
+# Create Data Visuailizations
+# ATTENTION: if your demux give you "invalid DISPLAY variable error" it's because you don't have graphic interface.
+# To solve it create a file using nano ~/.config/matplotlib/matplotlibrc
+# And write the following
+# backend : agg
+
+qiime demux summarize \
+  --i-data demux-paired-end.qza \
+  --o-visualization demux-paired-end.qzv
+
+# Unload modules:
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/1_import.sh
+```
+
+After the script finishes, load the demux-paired-end.qzv file in the https://view.qiime2.org  website. You will see when the quality of your reads degenerates through an interactive box-plot. Through this box-plot, you can determine at which length you would truncate the forward and the reverse reads respectively. You will need these values for the next script. The idea is, of course, to find a compromise between retaining the higher number of reads and retaining the best quality of them. 
+
+![](figures/quality.JPG)
+
+##2_dada2.sh
+Estimated time: many hours
+The next step is dereplication. This script uses the DADA2 R package (https://www.nature.com/articles/nmeth.3869) which is implemented in qiime2 pipeline. 
+
+    Note: For a comparison of DADA2 amplicon sequence variants calling against the current OTU picking algorithm (2016) check https://benjjneb.github.io/dada2/SotA.html. 
+
+Accuracy: DADA2’s crucial advantage is that it uses more of the data. The DADA2 error model incorporates quality information, which is ignored by all other methods after filtering. The DADA2 error model incorporates quantitative abundances, whereas most other methods use abundance ranks if they use abundance at all. The DADA2 error model identifies the differences between sequences, eg. A->C, whereas other methods merely count the mismatches. DADA2 can parameterize its error model from the data itself, rather than relying on previous datasets that may or may not reflect the PCR and sequencing protocols used in your study.
+
+Performance: DADA2’s computational scaling gains come from the fact that it infers sequences exactly rather than constructing OTUs. De novo OTUs cannot be compared across samples unless all samples were pooled during OTU construction. However, exact sequences are comparable across samples, as exact sequences are consistent labels. Thus DADA2 can analyze each sample independently, resulting in linear scaling with sample number and trivial parallelization.
+
+It is extremely accurate and lowers the fraction of false positives. In our previous comparisons against the USEARCH clustering method, DADA2 was shown to better discern the samples and result in a much higher diversity. Technically, it relies on inference over sequences rather than OTU clustering, and this is why it is able to better discern a genetic variation from a different species (see website for more info). 
+
+The script will create a new folder called features and perform its analysis there which include: denoising of the sequences, dereplication, chimera removal all in one step. The script uses a parallelized version of the DADA2 algorithm, splitting the works on 12 cores. The more the cores, the shorter the time it will take. It will result in a table.qza file, which contains an atypical biom table, quasi-HDF5, and a rep-seqs.qza file, from which you can extract a the fasta file containing representative sequences. Both of them will be used in the following scripts. 
+
+    NOTE: in order to truncate low quality regions at the end of the sequences, the script needs you to specifiy the length of each sequence (fw and rev) in number of bases. Use the quality plots from the .qzv file produced in the previous step to determine such number and insert it in place of the two placeholders specified.
+
+```{bash, eval=FALSE}
+nano scripts/2_dada2.sh
+```
+
+```{bash eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J par_dada2
+#SBATCH -N 1
+#SBATCH --time=24:00:00
+#SBATCH --mem=40g			                                        	  #TOTAL RAM PER TASK
+#SBATCH -n 12					                                            #NUMBER OF CPUS PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/2_q2_dada2_%j.out	                                #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Filters paired-end sequences based on quality, merges dereplicates them 
+# using DADA2 algorithm. Includes chimera removal.
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+rm -r features
+mkdir features
+cp data/demux-paired-end.qza features/dada2input.qza
+cd features
+
+
+# ----------------Commands------------------------
+
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs dada2input.qza \
+  --p-n-threads 0 \
+  --p-trunc-len-f \    #INSERT NUMBER OF BASES BEFORE THE FORWARD SLASH AND DELETE THIS INSTRUCTION
+  --p-trunc-len-r \   #INSERT NUMBER OF BASES BEFORE THE FORWARD SLASH AND DELETE THIS INSTRUCTION
+  --o-table table.qza \
+  --o-denoising-stats stats.qza \
+  --o-representative-sequences rep-seqs.qza 
+
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/2_dada2.sh
+```
+
+##3_feature_table.sh	
+_Estimated time: minutes_
+
+This script will build a feature table, which is a similar concept of the OTU table from qiime1. Before applying this script it is highly recommended to check the mapping file, since errors in file names will be carried on until the end of the analysis. A good tool to validate qiime1 and qiime2 mapping files is the Keemei add-on for google spreadsheet, which runs in chrome (can be added from the chrome store http://keemei.qiime.org). Once installed, you need to open an empty google spreadsheet, then go to add-on, Keemei, and validate the mapping file for the version of qiime required. The process is interactive and will guide you through duplicate values, formatting issues, etc. 
+
+Finally, the script will also produce visualization of both the sequence file (rep-seqs.qza) and of the feature table (table.qza), which will be useful for the next steps. 
+```{bash, eval=FALSE}
+nano scripts/3_feature_table.sh	
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss		
+#SBATCH -J q2_feattab
+#SBATCH -N 1
+#SBATCH --time=2:00:00			
+#SBATCH --mem=10g			                                            #TOTAL RAM PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/3_q2_feature_table_%j.out	                        #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Build feature table required for further analysis
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# Housekeeping:
+cd features
+rm table.qzv
+rm rep-seqs.qzv
+rm reindexed-table.qza
+
+# ----------------Commands------------------------
+
+qiime feature-table summarize \
+  --i-table table.qza \
+  --o-visualization table.qzv \
+  --m-sample-metadata-file  ../blabla     		#INSERT PATH TO VALIDATED MAPPING FILE
+
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs.qza \
+  --o-visualization rep-seqs.qzv
+
+# Unload modules:
+module unload qiime2
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/3_feature_table.sh	
+```
+![](figures/table.JPG)
+
+##4_taxonomy.sh	
+_Estimated time: hours_
+
+This script provides the taxonomic assignments to your sequences. To do so, it will use a pre-trained dataset, which is a sequence database inferred through the application of the naïve Bayes classifier, and use a machine learning algorithm to assign the taxonomy of your sequence to that classifier. Therefore, it requires high computational power, and for this reason the script allocates many processors into which the script is parallelized, and a high amount of memory as well. The qiime2 website provides a classifier for Greengenes 13_8 and a classifier for SILVA 119; be careful to download the full sequences and not the truncated sequences for the V3 region only. 
+```{bash, eval=FALSE}
+nano scripts/4_taxonomy_SILVA.sh		
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J q2_scikit_tax
+#SBATCH -N 1
+#SBATCH --time=72:00:00
+#SBATCH --mem=30g				                                          #TOTAL RAM PER TASK		
+#SBATCH -n 8					                                            #NUMBER OF CPUS PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/4_q2_tax_SILVA128_%j.out	                        #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Assign taxonomy using a pre-trained scikit classifier version 0.19.1
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+cd features
+rm taxonomy.qza
+rm taxa-bar-plots.tsv
+rm taxonomy.qzv
+
+# ----------------Commands------------------------
+qiime feature-classifier classify-sklearn \
+  --i-reads rep-seqs.qza \
+  --o-classification taxonomy.qza \
+  --i-classifier  /ufrc/strauss/blabla          #INSERT PATH TO YOUR PRETRAINED DATABASE 
+
+qiime metadata tabulate \
+  --m-input-file taxonomy.qza \
+  --o-visualization taxonomy.qzv
+
+qiime taxa barplot \
+  --i-table table.qza \
+  --i-taxonomy taxonomy.qza \
+  --o-visualization taxa-bar-plots.qzv \
+  --m-metadata-file ../blabla     		          #INSERT PATH TO VALIDATED MAPPING FILE
+
+
+# Unload modules:
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/4_taxonomy_SILVA.sh		
+```
+![](figures/level-7-bars.svg)
+
+Optionally, you can train your own classifier. For that, you will first need to download a fasta database and the related taxonomy file (i.e. SILVA 128). Once you downloaded it you have to know: 
+-	your fw primer sequence
+-	your rev primer sequence
+-	the maximum length to your reads (single, not merged)
+Together with the fasta and taxonomy files, these are the inputs of the opt1_train_scikit.sh script, which will build another trained classifier from your database, truncated at the region of interest (which will reduce the computational power and time required for the taxonomy script). 
+
+    NOTE: there is a SILVA pre-trained database for version 132 available on the qiime2 website. I think it could be used for our primers, but need to double-check.
+```{bash, eval=FALSE}
+nano scripts/opt_train_sklearn.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J scikit_training
+#SBATCH -N 1
+#SBATCH --time=24:00:00
+#SBATCH --mem=40g			                          #TOTAL RAM PER TASK
+#SBATCH -D /ufrc/strauss/ 		                  #PATH TO A DATABASE FOLDER OF YOUR CHOICE
+#SBATCH -o logs/q2_scikit_train_%j.out	        #PATH OF LOG FILE
+
+date;hostname;pwd
+
+# ----------------Housekeeping--------------------
+rm -r 	#NAME OF THE NEW DATABASE FOLDER 
+mkdir 	#NAME OF THE NEW DATABASE FOLDER
+cd 	#NAME OF THE NEW DATABASE FOLDER
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ---------------Commands-------------------------
+
+qiime tools import \
+  --type 'FeatureData[Sequence]' \
+  --output-path imported-fasta-database.qza \
+  --input-path /ufrc/strauss/blabla   #INSERT PATH TO THE rep_set/rep_set_all/97/97_otus.fasta FILE
+
+
+qiime tools import \
+  --type 'FeatureData[Taxonomy]' \
+  --source-format HeaderlessTSVTaxonomyFormat \
+  --output-path imported-taxonomy.qza \
+  --input-path /ufrc/strauss/blabla #INSERT PATH TO THE taxonomy_all/97/consensus_taxonomy_7_levels.txt FILE
+
+qiime feature-classifier extract-reads \
+  --i-sequences imported-fasta-database.qza  \
+  --p-f-primer 	\	    #INSERT FW PRIMER SEQUENCE BEFORE THE FW SLASH AND DELETE THIS INSTRUCTION
+  --p-r-primer  \   	#INSERT REV PRIMER SEQUENCE BEFORE THE FW SLASH AND DELETE THIS INSTRUCTION
+  --p-trunc-len  \  	#INSERT LENGTH OF TRIMMED SEQUENCES BEFORE THE FW SLASH AND DELETE THIS 
+  --o-reads truncated-imported-db.qza
+
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads truncated-imported-db.qza \
+  --i-reference-taxonomy imported-taxonomy.qza \
+  --o-classifier 	/ufrc/strauss/blabla                      #INSERT NAME OF YOUR FINAL CLASSIFIER
+
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/opt_train_sklearn.sh
+```
+##5_PICRUST.sh
+To do the metabolic prediction in PICRUST just use the following script. It will reassign the taxonomy to the Greengeenes database (which...) in qiime1 so be sure to have a the necessary files as well. 
+
+    NOTE: At the time of writing, PICRUST2 is still in beta (https://github.com/picrust/picrust2) but might be worth keeping an eye on.
+The results are stored as predicted_metagenomes.L3.biom and metagenome_predictions.biom. I make some plots using its own commands, but you'd better do them anywhere else. 
+
+```{bash, eval=FALSE}
+nano scripts/5_PICRUST.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J PiCRUSt
+#SBATCH -N 1
+#SBATCH --time=72:00:00
+#SBATCH --mem=25g				                                          #TOTAL RAM PER TASK		
+#SBATCH -n 8					                                            #NUMBER OF CPUS PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/5_PICRUSt_%j.out	                                #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Predict functionalities of the genome from taxonomical assignments using KeggO
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+rm -r PICRUSt
+mkdir PICRUSt
+
+# ----------------Commands------------------------
+cp features/table.qza PICRUSt/imptab.qza
+
+qiime tools export \
+ --input-path features/rep-seqs.qza \
+  --output-path PICRUSt
+
+# Switch modules:
+module unload qiime2
+module load qiime/1.9.1
+
+cd PICRUSt
+echo "pick_otus:enable_rev_strand_match True"  >> $PWD/otu_picking_params_97.txt
+echo "pick_otus:similarity 0.97" >> $PWD/otu_picking_params_97.txt
+
+pick_closed_reference_otus.py \
+ -i dna-sequences.fasta \
+ -o gg \
+ -a -O 8 \
+ -p otu_picking_params_97.txt \
+ -r /ufrc/strauss/blabla \        #INSERT PATH TO THE gg_13_8_otus/rep_set/97_otus.fasta FILE AND DELETE THIS INSTRUCTION
+ -t /ufrc/strauss/blabla          #INSERT PATH TO THE gg_13_8_otus/taxonomy/97_otu_taxonomy.txt FILE
+
+filter_taxa_from_otu_table.py \
+  -i gg/*.biom \
+  -o table_wo_chl_mit.biom \
+  -n c__Chloroplast,f__Mitochondria
+
+mv table_wo_chl_mit.biom picrust_input.biom
+
+filter_otus_from_otu_table.py \
+ -i picrust_input.biom \
+ -o closed_otu_table.biom \
+ --negate_ids_to_exclude \
+ -e /ufrc/strauss/blabla        #INSERT PATH TO THE gg_13_8_otus/rep_set/97_otus.fasta FILE
+
+filter_samples_from_otu_table.py \
+ -i picrust_input.biom \
+ -o closed_otu_table_filt.biom \
+ -n 1
+module purge
+module load gcc/5.2.0
+module load picrust/1.1.3
+
+normalize_by_copy_number.py \
+ -i closed_otu_table_filt.biom \
+ -o normalized_otus.biom
+
+predict_metagenomes.py -i normalized_otus.biom -o metagenome_predictions.biom -a nsti_per_sample.tab
+
+categorize_by_function.py -i metagenome_predictions.biom -c KEGG_Pathways -l 3 -o predicted_metagenomes.L3.biom
+
+metagenome_contributions.py -i normalized_otus.biom -o ko_metagenome_contributions.tab --load_precalc_file_in_biom --suppress_subset_loading
+
+categorize_by_function.py -i metagenome_predictions.biom -c "KEGG_Pathways" -l 2 -o metagenome_at_level2.biom
+
+module purge
+module load qiime/1.9.1
+
+biom convert \
+ -i predicted_metagenomes.L3.biom \
+ -o predicted_metagenomes.L3.tsv \
+ --to-tsv \
+ --table-type "OTU table"
+
+sort_otu_table.py -i metagenome_predictions.biom  -o metagenome_predictions.by_category.biom -s YOUR_CATEGORY -m ../../mapping.txt #INSERT YOUR OWN CATEGORY AND PATH TO VALIDATED MAPPING FILE
+
+echo "summarize_taxa:md_identifier    KEGG_Pathways" >> $PWD/qiime_params.txt
+echo "summarize_taxa:absolute_abundance   True" >> $PWD/qiime_params.txt
+echo "summarize_taxa:level    2" >> $PWD/qiime_params.txt
+
+summarize_taxa_through_plots.py -i metagenome_at_level2.biom -p qiime_params.txt -o plots_at_level2
+
+module unload qiime
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/5_PICRUST.sh
+```
+![](figures/Picrust.png)
+
+#ITS pipeline
+The ITS pipeline is very similar to the 16S pipeline, BUT it has the following major differences:
+- ITS1 sequences contain parts of the 8S unit and of the ITS2 sequences which must be trimmed. 
+- ITS sequences are not all the same length, contrary to 16S. Therefore, DADA2 require different parameters.
+- UNITE database is used for ITS sequences instead of SILVA database. 
+
+    NOTE: the most recent version of qiime2 include an ITS pipeline tutorial, which I haven't looked at the moment of writing.
+    
+##0_setup.sh
+```{bash eval=FALSE}
+cd ITS
+mkdir raw_seqs
+mkdir logs
+mkdir scripts
+```
+
+Now move your compressed sequence files in the `raw_seqs` directory following the instructions frtom the Hipergator wiki page. Then start writing the first bash script, using 
+```{bash, eval=FALSE}
+nano scripts/0_setup.sh
+``` 
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+#SBATCH --account=strauss
+#SBATCH --job-name=setup
+#SBATCH --ntasks=1
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/0_setup_%j.out
+date;hostname;pwd
+
+################################################################################
+#
+# Setup data directory and copy raw_seqs contents
+#
+################################################################################
+
+##### Setup #####
+# Load module(s):
+
+# Housekeeping:
+rm -rf data
+
+# Make necessary directories:
+mkdir data
+mkdir data/raw_data
+
+##### Run commands #####
+# If sequences are individual directories (if not, comment this out):
+for dir in raw_seqs/*; do
+    cp $dir/* data/raw_data/.
+done 
+
+cd data/raw_data
+gunzip *.gz
+
+# Fix names: this depends of course on how your files are named. CHECK THEM!
+for file in data/raw_data/*.gz; do
+    mv $file ${file/Sarah?-/};
+    mv $file ${file/Sarah??-/};
+    mv $file ${file/Sarah???-/};
+done
+
+# Move files into their respective directory:
+mkdir R1s
+mkdir R2s
+mv *_R1_* R1s/.
+mv *_R2_* R2s/.
+
+# Concatenate into a single file
+cat R1s/* >> R1.fq
+cat R2s/* >> R2.fq
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/0_setup.sh
+```
+
+##1_merge_and_trim.sh
+This is the first difference: instead of using directly DADA2 to merge the pired ends, we will use `PEAR` (https://sco.h-its.org/exelixis/web/software/pear/) which will retain the quality of the base calls. Then we will trim the sequences removing the unwanted regions using `cutadapt` (http://journal.embnet.org/index.php/embnetjournal/article/view/200, now available also in Qiime2, but here used as is).
+
+*IMPORTANT*: The script will extract the barcodes from the sequences using qiime1. It will then produce a `txt` file which contains the barcodes associated to every file. You need to write those barcodes in your mapping file, in the column `BarcodeSequence` otherwise you will not be able to import the sequence. Pay attention to the correct associations between barcodes and file names when building your mapping files!!! 
+
+```{bash, eval=FALSE}
+nano scripts/1_merge_and_trim.sh
+```
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --account=strauss
+#SBATCH --job-name=merge_trim
+#SBATCH --time=8:00:00
+#SBATCH --ntasks=1
+#SBATCH -n 8
+#SBATCH --mem=20g
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/1_pear_cutadapt_%j.out
+date;hostname;pwd
+
+################################################################################
+#
+# Merge ITS paired ends and trims away regions outside primers
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load pear
+
+# ----------------Housekeeping---------------------
+rm -r features
+mkdir features
+cd data
+rm -r merge.pear.*
+rm no*.fastq
+rm trimmed-seqs.fastq
+
+
+# ----------------Commands------------------------
+
+# Merge paired end reads
+pear -j 8 -y 15G\
+  -f raw_data/R1.fq \
+  -r raw_data/R2.fq \
+  -o merge.pear
+
+module unload pear
+module load cutadapt
+
+#Trim out primers 
+cutadapt -a GCATCGATGAAGAACGCAGC -o nofw.fastq merge.pear.assembled.fastq 
+cutadapt -g CTTGGTCATTTAGAGGAAGTAA -o noprimer-seqs.fastq nofw.fastq
+
+#Trim out 5.8S and SSU
+cutadapt -g CTTGGTCATTTAGAGGAAGTAAAAGTCGTAACAAGGTTTCCGTAGGTGAACCTGCGGAAGGATCATT -a AACTTTCAACAACGGATCTCTTGGYTCTSGCATCGATGAAGAACGCAGC -o trimmed-seqs.fastq noprimer-seqs.fastq
+
+module unload cutadapt 
+
+mv trimmed-seqs.fastq ../features/trimmed-seqs.fastq
+cd ../features
+
+#Extract barcodes, necessary to import into Qiime2
+module load qiime
+
+extract_barcodes.py \
+ -f trimmed-seqs.fastq \
+ -c barcode_in_label \
+ --char_delineator ':' \
+ --bc1_len  10 \
+ -o .
+
+module unload qiime
+
+gzip *
+mv trimmed-seqs.fastq.gz sequences.fastq.gz
+
+#In case you need to rebuild your mapping file, you can extract filenames and first
+#lines from your original sequences with 
+cd ../data/raw_data/R1s
+head -n1 *.fastq > ../sequences_with_headers.txt
+
+#You will have then a file in which for each pair of lines, the first one is the
+#filename and the second one is the header, of wich the last characters after the ':'
+#are the associated barcode. You can edit this file elsewhere and use it to get the
+#barcodes associated for each sample and then paste them in the BarcodeSequences field
+#of the mapping file. Pay attention to the correct order of file names!!
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/1_merge_and_trim.sh
+```
+
+##2_import.sh
+
+```{bash, eval=FALSE}
+nano scripts/2_import.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --account=strauss
+#SBATCH --job-name=import_ITS
+#SBATCH --time=8:00:00
+#SBATCH --ntasks=1
+#SBATCH -n 8
+#SBATCH --mem=20g
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/2_import_q2_%j.out
+#SBATCH -A strauss
+date;hostname;pwd
+
+################################################################################
+#
+# Imports reads into Qiime2 artifacts and builds visualizations 
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+cd features
+rm -r *.qza
+
+# ----------------Commands------------------------
+
+#Import Data in qiime2 artifact
+qiime tools import \
+  --type EMPSingleEndSequences \
+  --input-path . \
+  --output-path trimmed-seqs.qza
+
+qiime demux emp-single \
+ --i-seqs trimmed-seqs.qza \
+ --m-barcodes-column BarcodeSequence \
+ --o-per-sample-sequences demultiplexed-seqs.qza \
+ --m-barcodes-file .../blabla     		          #INSERT PATH TO VALIDATED MAPPING FILE
+
+# Visualizations
+qiime demux summarize \
+  --i-data demultiplexed-seqs.qza \
+  --o-visualization demultiplexed-seqs.qzv
+
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/1_merge_and_trim.sh
+```
+
+##3_dada2_single.sh
+Second difference: DADA2 with different parameters
+```{bash, eval=FALSE}
+nano scripts/3_dada2_single.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --time=24:00:00
+#SBATCH -N 1
+#SBATCH -J denoise_single
+#SBATCH -n 14                                                     #NUMBER OF CPUS PER TASK
+#SBATCH --mem=40g                                                 #MEMORY PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/3_denoise_singles_q2_%j.out
+#SBATCH -A strauss
+
+date;hostname;pwd
+
+################################################################################
+#
+# Build feature table required for further analysis
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# Housekeeping:
+cd features
+
+# ----------------Commands------------------------
+ 
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demultiplexed-seqs.qza \
+  --p-trim-left 1 \
+  --p-trunc-len 0 \
+  --o-representative-sequences rep-seqs.qza \
+  --p-n-threads 0 \
+  --o-table table.qza \
+  --o-denoising-stats stats.qza \
+  --verbose
+
+qiime feature-table summarize \
+  --i-table table.qza \
+  --o-visualization table.qzv \
+  --m-sample-metadata-file  ../blabla     		          #INSERT PATH TO VALIDATED MAPPING FILE
+
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs.qza \
+  --o-visualization rep-seqs.qzv
+
+# Unload modules:
+module unload qiime2
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/3_dada2_single.sh
+```
+
+##4_Taxonomy_UNITE.sh
+Finally the phylogenetic affiliation using UNITE database. Similarly to what done before, we will use a pretrained Naive Bayes classifier. Therefore, if you want to classify against a different version, you will use the optional training script provided. 
+
+```{bash, eval=FALSE}
+nano scripts/4_Taxonomy_UNITE.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --mem=50g
+#SBATCH --time=72:00:00
+#SBATCH -N 1
+#SBATCH -n 12
+#SBATCH -J taxonomy_UNITE
+#SBATCH -o logs/4_taxonomy_UNITE_%j.out
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -A strauss
+
+date;hostname;pwd
+
+################################################################################
+#
+# Assign taxonomy using a pre-trained scikit classifier version 0.19.1 and UNITE v.12-2017
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+cd features
+rm taxonomy.qza
+rm taxa-bar-plots.tsv
+rm taxonomy.qzv
+
+# ----------------Commands------------------------
+
+qiime feature-classifier classify-sklearn \
+  --i-reads rep-seqs.qza \
+  --o-classification taxonomy.qza \
+  --i-classifier  /ufrc/strauss/blabla          #INSERT PATH TO YOUR PRETRAINED DATABASE 
+
+qiime metadata tabulate \
+  --m-input-file taxonomy.qza \
+  --o-visualization taxonomy.qzv
+
+qiime taxa barplot \
+  --i-table table.qza \
+  --i-taxonomy taxonomy.qza \
+  --o-visualization taxa-bar-plots.qzv \
+  --m-metadata-file ../blabla     		          #INSERT PATH TO VALIDATED MAPPING FILE
+
+# Unload modules:
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/4_Taxonomy_UNITE.sh
+```
+And here's the optgional training
+```{bash, eval=FALSE}
+nano scripts/opt_train_sklearn_UNITE.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --mem=30g
+#SBATCH --time=24:00:00
+#SBATCH -N 1
+#SBATCH -J scikit_training
+#SBATCH -D /ufrc/strauss/ 		                  #PATH TO A DATABASE FOLDER OF YOUR CHOICE
+#SBATCH -o logs/q2_scikit_train_%j.out
+#SBATCH -A strauss
+date;hostname;pwd
+
+# ----------------Housekeeping--------------------
+#rm SILVA_128_99_otus.qza
+#rm SILVA_128_99_tax.qza
+#rm SILVA_128_99_otus_515-926.qza
+#rm SILVA_nb_99_V3-V4.qza
+
+# ----------------Load Modules--------------------
+module load qiime2/2017.11
+
+# ---------------Commands-------------------------
+
+qiime tools import \
+  --type FeatureData[Sequence] \
+  --output-path UNITE_99_2017.12_seqs.qza \
+  --input-path  /ufrc/strauss/blabla  #INSERT PATH TO sh_refs_qiime_ver7_99_s_01.12.2017.fasta 
+
+qiime tools import \
+  --type FeatureData[Taxonomy] \
+  --source-format HeaderlessTSVTaxonomyFormat \
+  --output-path UNITE_99_2017.12_tax.qza \
+  --input-path  /ufrc/strauss/blabla  #INSERT PATH TO sh_taxonomy_qiime_ver7_99_s_01.12.2017.txt 
+
+
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads UNITE_99_2017.12_seqs.qza \
+  --i-reference-taxonomy UNITE_99_2017.12_tax.qza \
+  --o-classifier UNITE_99_2017.12_classifier.qza
+
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/opt_train_sklearn_UNITE.sh
+```
+
+##5_FUNGUILD.sh
+Metabolic predictions are done by assigning taxa to guilds. (https://github.com/UMNFuN/FUNGuild). 
+The results are stored in two files: a file ending with guilds.txt and a guilds_unmatched.txt. There are no visualizations for that so they need to be imported and visualized elsewhere (i.e. STAMP, Tableau, R, Excel)
+```{bash, eval=FALSE}
+nano scripts/5_FUNGUILD.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+##SBATCH -A strauss
+#SBATCH -J FunGuild
+#SBATCH -N 1
+#SBATCH --time=72:00:00
+#SBATCH --mem=25g				                                          #TOTAL RAM PER TASK		
+#SBATCH -n 8					                                            #NUMBER OF CPUS PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/ITS  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/5_Funguild_%j.out	                                #PATH OF LOG FILE
+
+date;hostname;pwd
+
+# ----------------Housekeeping--------------------
+rm -r Funguild
+mkdir Funguild
+cd Funguild
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ---------------Commands-------------------------
+qiime tools export \
+  --input-path ../features/table.qza \
+  --output-path exported-table
+
+qiime tools export \
+  --input-path ../features/taxonomy.qza \
+  --output-path exported-taxonomy
+
+module unload qiime2
+module load qiime/1.9.1
+
+biom convert \
+  -i exported-table/feature-table.biom \
+  -o feature-json.biom \
+  --table-type="OTU table" \
+  --to-json
+
+sed -i s/Taxon/taxonomy/ exported-taxonomy/taxonomy.tsv | sed -i s/Feature\ ID/FeatureID/ exported-taxonom$
+
+biom add-metadata \
+  -i feature-json.biom \
+  -o feature_w_tax.biom \
+  --observation-metadata-fp exported-taxonomy/taxonomy.tsv \
+  --observation-header FeatureID,taxonomy \
+  --sc-separated taxonomy
+
+filter_samples_from_otu_table.py \
+  -i feature_w_tax.biom \
+  -o filtered-table.biom \
+  -n 1
+
+filter_taxa_from_otu_table.py \
+  -i filtered-table.biom \
+  -o table_wo_chl_mit.biom \
+  -n D_2__Chloroplast,D_4__Mitochondria
+  
+biom convert \
+  -i table_wo_chl_mit.biom \
+  -o fungi_table.txt \
+  --to-tsv \
+  --header-key taxonomy
+  
+sed -i s/"#OTU ID"/"OTU ID"/ fungi_table.txt
+sed -i '1d' fungi_table.txt 
+
+wget -O Funguild.py https://raw.githubusercontent.com/UMNFuN/FUNGuild/master/Guilds_v1.1.py
+
+python3 Funguild.py -otu fungi_table.txt -db fungi -m -u
+
+module unload qiime
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/5_FUNGUILD.sh
+```
+
+#Merged kingdoms
+Now it's time to merge the taxonomy tables and the feature tables of 16S and ITS into one single table. Then, also the representative sequences obtained by the DADA2 output will be merged. Be careful with the mapping files, be sure that they all have the same number and order of samples!
+```{bash eval=FALSE}
+cd merged
+mkdir raw_seqs
+mkdir logs
+mkdir scripts
+```
+##1_merge_kingdoms.sh
+```{bash, eval=FALSE}
+nano scripts/1_merge_kingdoms.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -J merge_kingdoms
+#SBATCH --time=1:00:00
+#SBATCH --ntasks=1
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/merged  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/1_merge_kingdoms_%j.out
+#SBATCH -A strauss
+
+date;hostname;pwd
+
+################################################################################
+#
+# This script will merge the ITS and 16S table and taxonomy artifacts 
+# 
+#################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ------------------Commands----------------------
+cp ../ITS/features/table.qza table_ITS.qza
+cp ../ITS/features/taxonomy.qza taxonomy_ITS.qza
+cp ../ITS/features/rep-seqs.qza repseqs_ITS.qza
+cp ../16S/features/table.qza table_16S.qza
+cp ../16S/features/taxonomy.qza taxonomy_16S.qza
+cp ../16S/features/rep-seqs.qza repseqs_16S.qza
+
+qiime feature-table merge \
+  --i-tables table_16S.qza \
+  --i-tables table_ITS.qza \
+  --p-overlap-method error_on_overlapping_feature \
+  --o-merged-table table.qza
+
+qiime feature-table merge-taxa \
+  --i-data taxonomy_16S.qza \
+  --i-data taxonomy_ITS.qza \
+  --o-merged-data taxonomy.qza
+
+qiime feature-table merge-seqs \
+ --i-data repseqs_16S.qza \
+ --i-data repseqs_ITS.qza \
+ --o-merged-data rep-seqs.qza
+
+qiime feature-table summarize \
+ --i-table table.qza \
+ --o-visualization table.qzv \
+ --m-sample-metadata-file ../blabla     		          #INSERT PATH TO VALIDATED MAPPING FILE
+
+qiime tools export \
+  --input-path taxonomy.qza \
+  --output-path .
+
+sed -i s/Taxon/taxonomy/ taxonomy.tsv | sed -i s/Feature\ ID/FeatureID/ taxonomy.tsv
+
+module unload qiime2
+
+date
+
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/opt_train_sklearn_UNITE.sh
+```
+
+##2_to_biom_and_beyond.sh
+This script will now convert the tables into Phyloseq-readable files and produce also normalized tables using the DESEq2 algorithm (http://genomebiology.com/2014/15/12/550). For why this is better than rarefaction, please refer to the Waste not, want not paper (https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003531)
+
+Watch out: in order to obtain correct filtering 
+```{bash, eval=FALSE}
+nano scripts/2_to_biom_and_beyond.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH --mem=20g
+#SBATCH --time=8:00:00
+#SBATCH -N 1
+#SBATCH -J q2_to_biom
+#SBATCH -o logs/2_q2_to_biom_%j.out
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/merged  #PATH OF YOUR WORKING FOLDER
+#SBATCH -A strauss
+
+date;hostname;pwd
+
+##################################################################################
+#
+# Filters low frequency features, and unwanted taxa, exports to Biom JSON and
+# normalizes tables using CSS and DESeq2 algorithms
+#
+##################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+rm -r biom
+mkdir features
+mv  *.qza features/
+mv taxonomy.tsv features/taxonomy.tsv
+cd features
+
+# ------------------Commands----------------------
+
+qiime tools export \
+  --input-path table.qza \
+  --output-path ../biom
+
+qiime tools export \
+  --input-path taxonomy.qza \
+  --output-path ../biom
+
+module unload qiime2
+module load qiime/1.9.1
+
+cd ../biom
+
+biom convert \
+  -i feature-table.biom \
+  -o feature-json.biom \
+  --table-type="OTU table" \
+  --to-json
+
+sed -i s/Taxon/taxonomy/ taxonomy.tsv | sed -i s/Feature\ ID/FeatureID/ taxonomy.tsv
+
+biom add-metadata \
+  -i feature-json.biom \
+  -o feature_w_tax.biom \
+  --observation-metadata-fp taxonomy.tsv \
+  --observation-header FeatureID,taxonomy,Confidence \
+  --sc-separated taxonomy --float-fields Confidence
+
+filter_samples_from_otu_table.py \
+  -i feature_w_tax.biom \
+  -o filtered-table.biom \
+  -n 1
+
+filter_taxa_from_otu_table.py \
+  -i filtered-table.biom \
+  -o table_wo_chl_mit.biom \
+  -n D_2__Chloroplast,D_4__Mitochondria
+
+normalize_table.py \
+  -i table_wo_chl_mit.biom \
+  -a DESeq2 \
+  --DESeq_negatives_to_zero \
+  -o DESeq2_table.biom
+
+biom add-metadata \
+  -i DESeq2_table.biom \
+  -o DESeq2_w_tax.biom \
+  --observation-metadata-fp taxonomy.tsv \
+  --observation-header FeatureID,taxonomy,Confidence \
+  --sc-separated taxonomy --float-fields Confidence
+
+normalize_table.py \
+  -i table_wo_chl_mit.biom \
+  -a CSS \
+  -o CSS_table.biom
+
+rm feature.tsv
+rm feature-hdf5.biom
+
+biom convert \
+ -i table_wo_chl_mit.biom \
+ -o feature-table.tsv \
+ --to-tsv \
+ --table-type "OTU table"
+
+sed -i s/"#OTU ID"/FeatureID/ feature-table.tsv
+sed -i '1d' feature-table.tsv
+
+module unload qiime
+module unload python
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/2_to_biom_and_beyond.sh
+```
+
+##3_build_tree.sh
+Finally,  this script will use the merged sequences to build a new tree. Note that both this and the previous scripts can also be applied to the correspondent file having the same names in the 16S or the ITS folder, by changing the working directory
+```{bash, eval=FALSE}
+nano scripts/3_build_tree.sh
+```
+
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -J build_tree
+#SBATCH --mem=20g
+#SBATCH --time=8:00:00
+#SBATCH --ntasks=1
+#SBATCH -n 12
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/merged  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/3_q2_tree_%j.out
+#SBATCH -A strauss
+
+date;hostname;pwd
+
+################################################################################
+#
+# Builds tree for further analysis and exports in .tre format
+# 
+################################################################################
+
+# ----------------Housekeeping--------------------
+cd biom
+rm aligned-rep-seqs-filtered.qza
+rm masked-aligned-rep-seqs-filtered.qza
+rm unrooted-tree-filtered.qza
+rm rooted-tree-filtered.qza
+rm -r *.nwk
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ------------------Commands----------------------
+
+qiime feature-table filter-seqs \
+ --i-data ../features/rep-seqs.qza \
+ --m-metadata-file feature-table.tsv \
+ --p-no-exclude-ids \
+ --o-filtered-data rep-seqs-filtered.qza
+
+qiime alignment mafft \
+  --i-sequences rep-seqs-filtered.qza \
+  --p-n-threads 12 \
+  --o-alignment aligned-rep-seqs-filtered.qza
+
+qiime alignment mask \
+  --i-alignment aligned-rep-seqs-filtered.qza \
+  --o-masked-alignment masked-aligned-rep-seqs-filtered.qza
+
+qiime phylogeny fasttree \
+  --i-alignment masked-aligned-rep-seqs-filtered.qza \
+  --o-tree unrooted-tree-filtered.qza
+
+qiime phylogeny midpoint-root \
+  --i-tree unrooted-tree-filtered.qza \
+  --o-rooted-tree rooted-tree-filtered.qza
+
+qiime tools export \
+  --input-path rooted-tree-filtered.qza \
+  --output-path .
+
+module unload qiime2
+
+date
+```
+Exit using `ctrl + X` and save with `Y`. Then do
+```{bash, eval=FALSE}
+sbatch scripts/3_build_tree.sh
+```
+
+
