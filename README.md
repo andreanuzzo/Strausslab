@@ -7,8 +7,8 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 ### Phyloseq and Machine learning codes
 
 ### VIF-based backwards selection scripts
-[CAP]https://github.com/andreanuzzo/Strausslab/blob/master/vif.cap.bw_sel.R
-[CCA]https://github.com/andreanuzzo/Strausslab/blob/master/vif.cca.bw_sel.R
+[CAP](https://github.com/andreanuzzo/Strausslab/blob/master/vif.cap.bw_sel.R)
+[CCA](https://github.com/andreanuzzo/Strausslab/blob/master/vif.cca.bw_sel.R)
 
 ### Copy of FunGuild 1.1.0
 https://github.com/andreanuzzo/Strausslab/blob/master/Funguild.py
