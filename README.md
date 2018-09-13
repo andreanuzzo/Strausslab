@@ -7,7 +7,7 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * [Phyloseq and Machine learning codes](https://andreanuzzo.github.io/Strausslab/Workshop.html)
 
-* [Jupyter notebook for balance extraction](https://andreanuzzo.github.io/Strausslab/Gneiss_elab.ipynb)
+* [Jupyter notebook for balance extraction](https://nbviewer.jupyter.org/urls/andreanuzzo.github.io/Strausslab/Gneiss_elab.ipynb)
 
 ### Scripts
 * [Copy of R script for Rarefaction plots in Phyloseq (from mahendra-mariadassou/phyloseq-extended)](https://andreanuzzo.github.io/Strausslab/richness.R)
@@ -19,10 +19,8 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 * [Balance extractor for Gneiss](https://andreanuzzo.github.io/Strausslab/Balance_extractor.py)
 
 ### Slides
-[Day 1:]()Data visualization and feature engineering
+- [Day 1:](https://andreanuzzo.github.io/Strausslab/Workshop_day1.pdf) Data visualization and feature engineering
 
-[Day 2:]()Multivariate analyses in Phyloseq
+- [Day 2:](https://andreanuzzo.github.io/Strausslab/Workshop_day2.pdf) Multivariate analyses in Phyloseq
 
-[Day 3:]()Machine Learning in Qiime2
-
-[Full Workshop]()
+- [Day 3:](https://andreanuzzo.github.io/Strausslab/Workshop_day3.pdf) Machine Learning in Qiime2
