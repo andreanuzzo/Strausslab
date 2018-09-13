@@ -4,7 +4,8 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 ## Workshop Sep 2018
 [Qiime2 walkthrough: 16S, ITS and merged kingdoms](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html)
 
-Phyloseq and Machine learning codes
+[Phyloseq and Machine learning codes](https://andreanuzzo.github.io/Strausslab/Workshop.html)
+[Jupyter notebook for balance extraction](https://andreanuzzo.github.io/Strausslab/Gneiss_elab.ipynb)
 
 [Copy of R script for Rarefaction plots in Phyloseq (from mahendra-mariadassou/phyloseq-extended)](https://andreanuzzo.github.io/Strausslab/richness.R)
 
