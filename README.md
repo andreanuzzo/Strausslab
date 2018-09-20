@@ -8,7 +8,7 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 * [Qiime2 walkthrough: 16S, ITS and merged kingdoms](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html)
 
 * [Phyloseq and Machine learning codes](https://andreanuzzo.github.io/Strausslab/tenor.gif)
-  * John's [Day 1]()
+  * John's [Day 1](https://andreanuzzo.github.io/Strausslab/Day1.nb.html)
 
 ### Scripts
 * [Copy of FunGuild 1.1.0](https://andreanuzzo.github.io/Strausslab/Funguild.py)
