@@ -1,0 +1,194 @@
+---
+title: "Getting ready for the workshop"
+output: 
+  html_notebook: 
+    toc: yes
+    toc_float: yes
+---
+
+# Copying files from Andy's folder on your folder on HiperGator
+If you really, Really, REALLY, don't want to do the previous part of the Qiime workshop (available for dowload [here](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html "here")) you can copy the necessary files from my workshop folder. To do so, first _navigate into your desired project directory on HiperGator_ and then do
+```{bash eval=FALSE}
+mkdir merged
+cp -r /ufrc/strauss/andrea.nuzzo/projects/Workshop/merged/biom merged/
+cp /ufrc/strauss/andrea.nuzzo/projects/Workshop/plant_data.csv ./
+```
+
+# Perform the Qiime2 walkthrough on Biomics B2 files (recommended)
+If, instead you want to do the previous part of the Qiime workshop (available for dowload [here](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html)) you can download the raw sequences in _your project directory_ by navigating into it and then
+```{bash eval=FALSE}
+mkdir 16S ITS merged
+
+cp -r /ufrc/strauss/andrea.nuzzo/projects/Workshop/16S/raw_seqs 16S/
+cp -r /ufrc/strauss/andrea.nuzzo/projects/Workshop/ITS/raw_seqs ITS/
+cp /ufrc/strauss/andrea.nuzzo/projects/Workshop/mapping.txt ./
+
+```
+
+You can now proceed with the workshop.
+
+# Perform the Qiime2 walkthrough on the Moving Pictures tutorial
+If you want to work on the Qiime2 walkthrough by using the files available in the Moving Pictures tutorial officially released by the Qiime2 guys (that you can follow [here](https://docs.qiime2.org/2018.6/tutorials/moving-pictures/)) you will have to skip the script `0_setup.sh`, and modify `1_import.sh` and `2_dada2.sh` as follows. Those data are single reads sequences, _16S only_ and _are not_ in the same format we normally use at the Strauss lab. So, choose at your own risk. So, in _your project directory_ do
+
+```{bash, eval=FALSE}
+wget -O "sample-metadata.tsv" "https://data.qiime2.org/2018.6/tutorials/moving-pictures/sample_metadata.tsv" #This will be your mapping file
+
+mkdir data
+mkdir data/raw_data
+
+wget -O "data/raw_data/barcodes.fastq.gz" "https://data.qiime2.org/2018.6/tutorials/moving-pictures/emp-single-end-sequences/barcodes.fastq.gz"
+wget -O "data/raw_data/sequences.fastq.gz" "https://data.qiime2.org/2018.6/tutorials/moving-pictures/emp-single-end-sequences/sequences.fastq.gz"
+```
+
+
+##1_import.sh
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J q2_import
+#SBATCH --time=2:00:00                                            #Maximum number of hours
+#SBATCH -N 1                                                      #Number of nodes
+#SBATCH --mem=10g                                                 #Allocated RAM
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/1_q2_import_%j.out                                #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Import fastq.gz files into a .qza file
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping---------------------
+rm -r demux*.q*
+cd data
+
+# ----------------Commands------------------------
+
+#Import Data in qiime2 artifact
+qiime tools import \
+  --type EMPSingleEndSequences \
+  --input-path raw_data \
+  --output-path emp-single-end-sequences.qza
+  
+qiime demux emp-single \
+  --i-seqs emp-single-end-sequences.qza \
+  --m-barcodes-file ../sample-metadata.tsv \
+  --m-barcodes-column BarcodeSequence \
+  --o-per-sample-sequences demux.qza
+
+# Create Data Visuailizations
+# ATTENTION: if your demux give you "invalid DISPLAY variable error" it's because you don't have graphic interface.
+# To solve it create a file using nano ~/.config/matplotlib/matplotlibrc
+# And write the following
+# backend : agg
+
+qiime demux summarize \
+  --i-data demux.qza \
+  --o-visualization demux-paired-end.qzv
+
+# Unload modules:
+module unload qiime2
+
+date
+```
+
+##2_dada2.sh
+```{bash, eval=FALSE}
+#!/bin/bash
+
+# ----------------SLURM Parameters----------------
+
+#SBATCH -A strauss
+#SBATCH -J par_dada2
+#SBATCH -N 1
+#SBATCH --time=24:00:00
+#SBATCH --mem=40g                                                         #TOTAL RAM PER TASK
+#SBATCH -n 12                                                               #NUMBER OF CPUS PER TASK
+#SBATCH -D /ufrc/strauss/your_account/your_working_directory/16S  #PATH OF YOUR WORKING FOLDER
+#SBATCH -o logs/2_q2_dada2_%j.out                                   #PATH OF LOG FILE
+
+date;hostname;pwd
+
+################################################################################
+#
+# Filters paired-end sequences based on quality, merges dereplicates them 
+# using DADA2 algorithm. Includes chimera removal.
+# 
+################################################################################
+
+# ----------------Load Modules--------------------
+module load qiime2
+
+# ----------------Housekeeping--------------------
+rm -r features
+mkdir features
+cp data/demux.qza features/dada2input.qza
+cd features
+
+
+# ----------------Commands------------------------
+
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs dada2input.qza \
+  --p-trim-left 0 \
+  --p-trunc-len 120 \
+  --o-table table.qza \
+  --o-denoising-stats stats.qza \
+  --o-representative-sequences rep-seqs.qza 
+
+module unload qiime2
+
+date
+```
+
+Follow the Qiime2 walkthrough (not the moving pictures tutorial) for the 16S part only. Then you will use the files contained in the folder `16S/biom` instead of `merged/biom`.
+
+# How to lauch Rstudio on HiperGator:
+Once you have your account on HiperGator, navigate inside your folder (where you moved your data). You can create an additional folder for your R notebooks or you can leave it as it is. Once you are ready, just do
+```{bash, eval=FALSE}
+module load gui
+launch_rstudio_gui -p 2 -m 6
+```
+
+This will launch the program using 2 processors and 6 gb of memory. We have 16 cores and 56gb on our machine, so we should be able to work together.
+You wil see an output like this:
+```{bash, eval=FALSE}
+Verifying SSH setup for your_username
+
+Starting 'rstudio' app from 'rstudio' module under Xpra in a SLURM gui session.
+
+Requested rstudio memory size: '6gb'
+
+Requested '2' processor cores
+
+Requested '8' hours for the session
+
+
+Waiting for the job to start as '-n' (nowait) argument was not specified.
+
+The rstudio job '25669513' has started. Listing all active xpra sessions.
+
+List of SLURM GUI Sessions for andrea.nuzzo:
+You can connect to all 'RUNNING' sessions
+
+RStudio session job 25669513 is RUNNING
+  Copy this command to a terminal on your LOCAL PC:
+    xpra attach ssh:andrea.nuzzo@i21a-s3.rc.ufl.edu:2108
+
+See https://help.rc.ufl.edu/doc/GUI_Programs for general documentation on gui sessions
+```
+
+You should now open ANOTHER terminal window and copy-paste the line that starts with `xpra`. You will be asked for confirmation and a password, which is your hipergator password. Once you're done, Xpra will open and you will be able to use RStudio. 
+
+_Note: Xpra is a separate software. You will have to install it on your local machine by following the instrcutions reported [here] (https://xpra.org/trac/wiki/Download )_
+
+# Launch RStudio on your own computer 
+If you don't want to depend on HiperGator, you will have to copy your files on your local machine from `/ufrc/strauss/andrea.nuzzo/projects/Workshop/merged/biom`. RStudio can be installed from [here](https://www.rstudio.com/products/rstudio/download/) (see bottom of the page for instrutions to install R as well)
