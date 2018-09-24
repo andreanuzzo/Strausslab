@@ -9,6 +9,7 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * [Phyloseq and Machine learning codes](https://andreanuzzo.github.io/Strausslab/giphy.gif)
   * John's [Day 1](https://andreanuzzo.github.io/Strausslab/Day1.nb.html)
+  * John's [Day 2](https://andreanuzzo.github.io/Strausslab/Day2.nb.html)
 
 ### Scripts
 * [Copy of FunGuild 1.1.0](https://andreanuzzo.github.io/Strausslab/Funguild.py)
@@ -22,6 +23,6 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 ### Slides
 - [x] [Day 1:](https://andreanuzzo.github.io/Strausslab/Workshop_day1.pdf) Data visualization and feature engineering
 
-- [ ] [Day 2:](https://andreanuzzo.github.io/Strausslab/Workshop_day2.pdf) Multivariate analyses in Phyloseq
+- [x] [Day 2:](https://andreanuzzo.github.io/Strausslab/Workshop_day2.pdf) Multivariate analyses in Phyloseq
 
 - [ ] [Day 3:](https://andreanuzzo.github.io/Strausslab/tenor.gif) Machine Learning in Qiime2
