@@ -13,7 +13,7 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 ### Scripts
 * [Copy of FunGuild 1.1.0](https://andreanuzzo.github.io/Strausslab/Funguild.py)
 
-* [Copy of R script for Rarefaction plots in Phyloseq (from mahendra-mariadassou/phyloseq-extended)](https://andreanuzzo.github.io/Strausslab/richness.R)
+* Copy of R script for [Rarefaction plots](https://andreanuzzo.github.io/Strausslab/richness.R) in Phyloseq (from mahendra-mariadassou/phyloseq-extended)
 
 * VIF-based backwards selection scripts: for [CAP](https://andreanuzzo.github.io/Strausslab/vif.cap.bw_sel.R) or [CCA](https://andreanuzzo.github.io/Strausslab/vif.cca.bw_sel.R)
 
