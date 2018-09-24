@@ -13,10 +13,15 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 ### Scripts
 * [Copy of FunGuild 1.1.0](https://andreanuzzo.github.io/Strausslab/Funguild.py)
 
+* [Copy of R script for Rarefaction plots in Phyloseq (from mahendra-mariadassou/phyloseq-extended)](https://andreanuzzo.github.io/Strausslab/richness.R)
+
+* VIF-based backwards selection scripts: for [CAP](https://andreanuzzo.github.io/Strausslab/vif.cap.bw_sel.R) or [CCA](https://andreanuzzo.github.io/Strausslab/vif.cca.bw_sel.R)
+
+
 
 ### Slides
 - [x] [Day 1:](https://andreanuzzo.github.io/Strausslab/Workshop_day1.pdf) Data visualization and feature engineering
 
-- [ ] [Day 2:](https://andreanuzzo.github.io/Strausslab/tenor.gif) Multivariate analyses in Phyloseq
+- [ ] [Day 2:](https://andreanuzzo.github.io/Strausslab/Workshop_day2.pdf) Multivariate analyses in Phyloseq
 
 - [ ] [Day 3:](https://andreanuzzo.github.io/Strausslab/tenor.gif) Machine Learning in Qiime2
