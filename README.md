@@ -7,7 +7,7 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * [Qiime2 walkthrough: 16S, ITS and merged kingdoms](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html)
 
-* [Full notebook] for Phyloseq and Machine Learning analysis(https://andreanuzzo.github.io/Strausslab/Workshop.nb.html)
+* [Full notebook](https://andreanuzzo.github.io/Strausslab/Workshop.nb.html) for Phyloseq and Machine Learning analysis
   * John's [Day 1](https://andreanuzzo.github.io/Strausslab/Day1.nb.html)
   * John's [Day 2](https://andreanuzzo.github.io/Strausslab/Day2.nb.html)
   * [Jupyter notebook for balance extraction](https://nbviewer.jupyter.org/urls/andreanuzzo.github.io/Strausslab/Gneiss_elab.ipynb)
