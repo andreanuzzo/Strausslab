@@ -7,9 +7,11 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * [Qiime2 walkthrough: 16S, ITS and merged kingdoms](https://andreanuzzo.github.io/Strausslab/Qiime2_walkthrough.nb.html)
 
-* [Phyloseq and Machine learning codes](https://andreanuzzo.github.io/Strausslab/giphy.gif)
+* [Full notebook] for Phyloseq and Machine Learning analysis(https://andreanuzzo.github.io/Strausslab/Workshop.nb.html)
   * John's [Day 1](https://andreanuzzo.github.io/Strausslab/Day1.nb.html)
   * John's [Day 2](https://andreanuzzo.github.io/Strausslab/Day2.nb.html)
+  * [Jupyter notebook for balance extraction](https://nbviewer.jupyter.org/urls/andreanuzzo.github.io/Strausslab/Gneiss_elab.ipynb)
+
 
 ### Scripts
 * [Copy of FunGuild 1.1.0](https://andreanuzzo.github.io/Strausslab/Funguild.py)
@@ -18,6 +20,8 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * VIF-based backwards selection scripts: for [CAP](https://andreanuzzo.github.io/Strausslab/vif.cap.bw_sel.R) or [CCA](https://andreanuzzo.github.io/Strausslab/vif.cca.bw_sel.R)
 
+* [Balance extractor for Gneiss](https://andreanuzzo.github.io/Strausslab/Balance_extractor.py)
+
 
 
 ### Slides
@@ -25,4 +29,4 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 - [x] [Day 2:](https://andreanuzzo.github.io/Strausslab/Workshop_day2.pdf) Multivariate analyses in Phyloseq
 
-- [ ] [Day 3:](https://andreanuzzo.github.io/Strausslab/tenor.gif) Machine Learning in Qiime2
+- [x] [Day 3:](https://andreanuzzo.github.io/Strausslab/Workshop_day3.pdf) Machine Learning in Qiime2
