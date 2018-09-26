@@ -22,7 +22,9 @@ Support codes for the bioinformatics projects at SWFREC-University of Florida
 
 * [Balance extractor for Gneiss](https://andreanuzzo.github.io/Strausslab/Balance_extractor.py)
 
+* [Shell script](https://andreanuzzo.github.io/Strausslab/Q2_diversity.sh) for alpha diversity, beta diversity, rarefaction and emperor plots in Qiime2 
 
+* [Shell script](https://andreanuzzo.github.io/Strausslab/Q2_ANCOM.sh) for [ANCOM](https://www.ncbi.nlm.nih.gov/pubmed/26028277) analysis in Qiime2
 
 ### Slides
 - [x] [Day 1:](https://andreanuzzo.github.io/Strausslab/Workshop_day1.pdf) Data visualization and feature engineering
